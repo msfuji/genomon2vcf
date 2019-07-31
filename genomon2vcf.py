@@ -2,24 +2,34 @@
 """
 Convert SNV/INDEL calls by the Genomon2 pipeline into the VCF format.
 The input is a single-sample variant call in mutation/ directory.
-Merged calls in post_analysis/ shold not be used.
-Usage: genomon2vcf.py genomon_mutation.result.filt.txt outfile [sample id]
+Merged calls in post_analysis/ should not be used.
+Usage: python genomon2vcf.py genomon_mutation.result.filt.txt
 """
-__author__ = "Masashi Fujita <m-fujita@riken.jp>"
+__author__ = "Masashi Fujita <mssfjt@gmail.com>"
 __version__ = "0.0.1"
-__date__    = "Sep. 1, 2018"
+__date__    = "July 31, 2019"
 
 import sys
-import datetime
+import argparse
 import pysam
+import pandas as pd
+
+#
+# parse args
+#
+parser = argparse.ArgumentParser(description='Convert Genomon2 SNV/INDEL calls to VCF.')
+parser.add_argument('infile', metavar='genomon_file', help='Genomon2 SNV/INDEL file for a single sample')
+parser.add_argument('--ref', '-r', metavar='FASTA', help='FASTA file of reference human genome')
+parser.add_argument('--sample', '-s', metavar='ID', help='Sample ID')
+args = parser.parse_args()
 
 ########################################################################
 
+sys.exit(0)
 vcf_header="""\
-##fileformat=VCFv4.2
-##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##fileformat=VCFv4.1
+##FORMAT=<ID=VAF,Number=1,Type=Fload,Description="Variant allele frequency">
 ##INFO=<ID=SOMATIC,Number=0,Type=Flag,Description="Somatic mutation">
-##fileDate=%s
 ##reference=%s
 #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t%s
 """ 
