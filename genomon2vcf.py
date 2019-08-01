@@ -7,94 +7,105 @@ Usage: python genomon2vcf.py genomon_mutation.result.filt.txt
 """
 __author__ = "Masashi Fujita <mssfjt@gmail.com>"
 __version__ = "0.0.1"
-__date__    = "July 31, 2019"
+__date__ = "July 31, 2019"
 
 import sys
 import argparse
 import pysam
 import pandas as pd
 
+
+def correct_position(row, genome):
+    #
+    # Insertion
+    #
+    if row.Ref == '-':
+        vcf_pos = row.Start
+        base = genome.fetch(row.Chr, vcf_pos - 1, vcf_pos)
+        vcf_ref = base
+        vcf_alt = base + row.Alt
+    #
+    # Deletion
+    #
+    elif row.Alt == '-':
+        vcf_pos = row.Start - 1
+        base = genome.fetch(row.Chr, vcf_pos - 1, vcf_pos)
+        vcf_ref = base + row.Ref
+        vcf_alt = base
+    #
+    # SNV
+    #
+    else:
+        vcf_pos = row.Start
+        vcf_ref = row.Ref
+        vcf_alt = row.Alt
+
+    return pd.Series({'POS': vcf_pos, 'REF': vcf_ref, 'ALT': vcf_alt})
+
+
+def build_info(row):
+    return "VAF={:.3f}".format(row.misRate_tumor)
+
+
 #
 # parse args
 #
 parser = argparse.ArgumentParser(description='Convert Genomon2 SNV/INDEL calls to VCF.')
 parser.add_argument('infile', metavar='genomon_file', help='Genomon2 SNV/INDEL file for a single sample')
-parser.add_argument('--ref', '-r', metavar='FASTA', help='FASTA file of reference human genome')
+parser.add_argument('--out', '-o', metavar='VCF', help='Output VCF file [default: stdout]')
+parser.add_argument('--ref', '-r', metavar='FAS', help='FASTA file of reference human genome')
 parser.add_argument('--sample', '-s', metavar='ID', help='Sample ID')
 args = parser.parse_args()
 
-########################################################################
-
-sys.exit(0)
+#
+# prepare VCF header
+#
 vcf_header="""\
 ##fileformat=VCFv4.1
 ##FORMAT=<ID=VAF,Number=1,Type=Fload,Description="Variant allele frequency">
-##INFO=<ID=SOMATIC,Number=0,Type=Flag,Description="Somatic mutation">
-##reference=%s
-#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t%s
-""" 
-vcf_header_date=datetime.datetime.now().strftime("%Y%m%d")
+"""
+if args.ref is not None:
+    vcf_header += '##reference="' + args.ref + '"\n'
+vcf_header += """#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO"""
+if args.sample is not None:
+    vcf_header += '\t' + args.sample
+vcf_header += '\n'
 
-def die(msg):
-    sys.stderr.write(msg+"\n")
-    sys.exit(1)
+#
+# open input
+#
+df = pd.read_csv(args.infile, sep='\t', skiprows=3)
 
-genome_file="/home/w3varann/.genomon_local/genomon_pipeline-2.5.2/database/GRCh37/GRCh37.fa"
 
-########################################################################
 
-if len(sys.argv)==4:
-    sample=sys.argv[-1]
-    sys.argv.pop(-1)
+#
+# Correct INDEL positions if ref genome is given
+#
+if args.ref is not None:
+    genome = pysam.FastaFile(args.ref)
+    corrected_pos = df.apply(lambda row: correct_position(row, genome), axis=1)
+    df = pd.concat([df, corrected_pos], axis=1)
 else:
-    sample="Tumor"
+    df['POS'] = df.Start
+    df['REF'] = df.Ref
+    df['ALT'] = df.Alt
 
-if len(sys.argv)!=3:
-    die("Usage: genomon2vcf.py genomon_mutation.result.filt.txt outfile [sample id]")
-infile=sys.argv[1]
-outfile=sys.argv[2]
+#
+# format into VCF
+#
+df['ID'] = '.'
+df['QUAL'] = '.'
+df['FILTER'] = '.'
+df['INFO'] = df.apply(build_info, axis=1)
+df = df[['Chr', 'POS', 'ID', 'REF', 'ALT', 'QUAL', 'FILTER', 'INFO']]
 
-genome=pysam.FastaFile(genome_file)
-
-with open(outfile, "w") as f_out:
-    with open(infile) as f_in:
-        # skip header
-        for i in range(3):
-            line=f_in.next()
-            if line[0] != "#":
-                die("ERROR: invalid file format\n")
-        line=f_in.next()
-        if line.split()[0] != "Chr":
-            die("ERROR: invalid file format\n")
-
-        f_out.write(vcf_header % (vcf_header_date, genome_file, sample))
-        for line in f_in:
-            a=line.strip("\n").split("\t")
-            CHROM=a[0]
-            POS=a[1]
-            ID="."
-            REF=a[3]
-            ALT=a[4]
-            QUAL="."
-            FILTER="PASS"
-            INFO="SOMATIC"
-            FORMAT="GT"
-            GT="0/1"
-
-            ########## Insertion ##########
-            if REF=="-":
-                p=int(POS)
-                base=genome.fetch(CHROM, p-1, p)
-                REF=base
-                ALT=base+ALT
-            ########## Deletion ##########
-            elif ALT=="-":
-                p=int(POS) - 1
-                POS=str(p)
-                base=genome.fetch(CHROM, p-1, p)
-                REF=base+REF
-                ALT=base
-
-            newline="\t".join([CHROM, POS, ID, REF, ALT, QUAL, FILTER, INFO, FORMAT, GT])
-            f_out.write(newline+"\n")
-        
+#
+# save
+#
+if args.out is not None:
+    f_out = open(args.out, 'w')
+else:
+    f_out = sys.stdout
+f_out.write(vcf_header)  # write VCF header
+df.to_csv(f_out, sep='\t', header=False, index=False)
+f_out.close()
