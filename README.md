@@ -1,5 +1,5 @@
 # genomon2vcf
-Sample file is RK113_C01.genomon_mutation.result.filt.txt.
+Requires Python3. Sample file is RK113_C01.genomon_mutation.result.filt.txt.
 
 ```
 usage: genomon2vcf.py [-h] [--out VCF] [--ref FAS] [--sample ID] genomon_file
