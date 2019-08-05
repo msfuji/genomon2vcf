@@ -42,18 +42,28 @@ def correct_position(row, genome):
 
     return pd.Series({'POS': vcf_pos, 'REF': vcf_ref, 'ALT': vcf_alt})
 
+def fetch_snv_context(row, genome):
+    if row.Ref == '-' or row.Alt == '-':
+        return None
+    else:
+        return genome.fetch(row.Chr, row.Start - 2, row.Start + 1)
 
 def build_info(row):
-    return "VAF={:.3f}".format(row.misRate_tumor)
-
+    info_list = []
+    vaf_info = "VAF={:.3f}".format(row.misRate_tumor)
+    info_list.append(vaf_info)
+    if row.context is not None:
+        context_info = "Context={}".format(row.context)
+        info_list.append(context_info)
+    return ';'.join(info_list)
 
 #
 # parse args
 #
 parser = argparse.ArgumentParser(description='Convert Genomon2 SNV/INDEL calls to VCF.')
 parser.add_argument('infile', metavar='genomon_file', help='Genomon2 SNV/INDEL file for a single sample')
+parser.add_argument('ref', metavar='ref', help='FASTA file of reference human genome')
 parser.add_argument('--out', '-o', metavar='VCF', help='Output VCF file [default: stdout]')
-parser.add_argument('--ref', '-r', metavar='FAS', help='FASTA file of reference human genome')
 parser.add_argument('--sample', '-s', metavar='ID', help='Sample ID')
 args = parser.parse_args()
 
@@ -62,10 +72,10 @@ args = parser.parse_args()
 #
 vcf_header="""\
 ##fileformat=VCFv4.1
-##FORMAT=<ID=VAF,Number=1,Type=Fload,Description="Variant allele frequency">
+##FORMAT=<ID=VAF,Number=1,Type=Float,Description="Variant allele frequency">
+##FORMAT=<ID=Context,Number=1,Type=String,Description="Surrounding bases of SNV">
 """
-if args.ref is not None:
-    vcf_header += '##reference="' + args.ref + '"\n'
+vcf_header += '##reference="' + args.ref + '"\n'
 vcf_header += """#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO"""
 if args.sample is not None:
     vcf_header += '\t' + args.sample
@@ -76,19 +86,17 @@ vcf_header += '\n'
 #
 df = pd.read_csv(args.infile, sep='\t', skiprows=3)
 
-
+#
+# Correct INDEL positions
+#
+genome = pysam.FastaFile(args.ref)
+corrected_pos = df.apply(lambda row: correct_position(row, genome), axis=1)
+df = pd.concat([df, corrected_pos], axis=1)
 
 #
-# Correct INDEL positions if ref genome is given
+# fetch context of SNVs
 #
-if args.ref is not None:
-    genome = pysam.FastaFile(args.ref)
-    corrected_pos = df.apply(lambda row: correct_position(row, genome), axis=1)
-    df = pd.concat([df, corrected_pos], axis=1)
-else:
-    df['POS'] = df.Start
-    df['REF'] = df.Ref
-    df['ALT'] = df.Alt
+df['context'] = df.apply(lambda row: fetch_snv_context(row, genome), axis=1)
 
 #
 # format into VCF
