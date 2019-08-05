@@ -1,4 +1,5 @@
 # genomon2vcf
+Converts Genomon2 SNV/INDEL calls into VCF format.  Input file must be call for a single sample.
 Requires Python3. Sample file is RK113_C01.genomon_mutation.result.filt.txt.
 
 ```
