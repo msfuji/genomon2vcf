@@ -62,7 +62,7 @@ def build_info(row):
 #
 parser = argparse.ArgumentParser(description='Convert Genomon2 SNV/INDEL calls to VCF.')
 parser.add_argument('infile', metavar='genomon_file', help='Genomon2 SNV/INDEL file for a single sample')
-parser.add_argument('ref', metavar='ref', help='FASTA file of reference human genome')
+parser.add_argument('ref_genome', metavar='ref_genome', help='FASTA file of reference human genome')
 parser.add_argument('--out', '-o', metavar='VCF', help='Output VCF file [default: stdout]')
 parser.add_argument('--sample', '-s', metavar='ID', help='Sample ID')
 args = parser.parse_args()
@@ -72,10 +72,10 @@ args = parser.parse_args()
 #
 vcf_header="""\
 ##fileformat=VCFv4.1
-##FORMAT=<ID=VAF,Number=1,Type=Float,Description="Variant allele frequency">
-##FORMAT=<ID=Context,Number=1,Type=String,Description="Surrounding bases of SNV">
+##INFO=<ID=VAF,Number=1,Type=Float,Description="Variant allele frequency">
+##INFO=<ID=Context,Number=1,Type=String,Description="Surrounding bases of SNV">
 """
-vcf_header += '##reference="' + args.ref + '"\n'
+vcf_header += '##reference="' + args.ref_genome + '"\n'
 vcf_header += """#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO"""
 if args.sample is not None:
     vcf_header += '\t' + args.sample
@@ -89,7 +89,7 @@ df = pd.read_csv(args.infile, sep='\t', skiprows=3)
 #
 # Correct INDEL positions
 #
-genome = pysam.FastaFile(args.ref)
+genome = pysam.FastaFile(args.ref_genome)
 corrected_pos = df.apply(lambda row: correct_position(row, genome), axis=1)
 df = pd.concat([df, corrected_pos], axis=1)
 
