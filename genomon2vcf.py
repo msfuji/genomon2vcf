@@ -84,7 +84,7 @@ vcf_header += '\n'
 #
 # open input
 #
-df = pd.read_csv(args.infile, sep='\t', skiprows=3)
+df = pd.read_csv(args.infile, sep='\t', skiprows=3, dtype={'Chr': 'str'})
 
 #
 # Correct INDEL positions
